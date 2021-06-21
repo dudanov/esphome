@@ -44,6 +44,7 @@ class BaseFrame : public Frame {
   void finalize();
   uint8_t get_type() const { return this->pbuf_[9]; }
   void set_type(uint8_t value) { this->pbuf_[9] = value; }
+  void set_id(uint8_t id) { this->pbuf_[this->length_() - 2] = id; }
   bool has_response_type(uint8_t type) const { return this->resp_type_() == type; }
   bool has_type(uint8_t type) const { return this->get_type() == type; }
 

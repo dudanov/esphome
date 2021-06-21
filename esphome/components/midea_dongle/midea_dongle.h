@@ -30,9 +30,10 @@ class MideaDongle : public PollingComponent, public uart::UARTDevice {
   void loop() override;
   void set_appliance(MideaAppliance *app) { this->appliance_ = app; }
   void use_strength_icon(bool state) { this->rssi_timer_ = state; }
-  void write_frame(const Frame &frame);
+  void write_frame(BaseFrame &frame);
 
  protected:
+  void send_notify_(MideaMessageType type);
   MideaAppliance *appliance_{nullptr};
   NotifyFrame notify_;
   unsigned notify_timer_{1};
@@ -43,7 +44,8 @@ class MideaDongle : public PollingComponent, public uart::UARTDevice {
   // Reverse receive counter
   uint8_t cnt_{2};
   uint8_t rssi_timer_{0};
-  bool need_notify_{false};
+  uint8_t msg_id_{0};
+  //bool need_notify_{false};
 
   // Reset receiver state
   void reset_() {

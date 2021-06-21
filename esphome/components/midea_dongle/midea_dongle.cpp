@@ -31,9 +31,10 @@ void MideaDongle::loop() {
       ESP_LOGW(TAG, "RX: frame check failed!");
       continue;
     }
+    if (frame.get_type() == NETWORK_NOTIFY)
+      continue;
     if (frame.get_type() == QUERY_NETWORK) {
-      this->notify_.set_type(QUERY_NETWORK);
-      this->need_notify_ = true;
+      this->send_notify_(QUERY_NETWORK);
       continue;
     }
     if (this->appliance_ != nullptr)
@@ -67,29 +68,30 @@ void MideaDongle::update() {
   }
   if (this->notify_.is_connected() != is_conn) {
     this->notify_.set_connected(is_conn);
-    this->need_notify_ = true;
+    this->notify_timer_ = 1;
   }
   if (this->notify_.get_signal_strength() != wifi_strength) {
     this->notify_.set_signal_strength(wifi_strength);
-    this->need_notify_ = true;
+    this->notify_timer_ = 1;
   }
-  if (!--this->notify_timer_) {
-    this->notify_.set_type(NETWORK_NOTIFY);
-    this->need_notify_ = true;
-  }
-  if (this->need_notify_) {
+  if (--this->notify_timer_ == 0) {
     ESP_LOGD(TAG, "TX: notify WiFi STA %s, signal strength %d", is_conn ? "connected" : "not connected", wifi_strength);
-    this->need_notify_ = false;
     this->notify_timer_ = 600;
-    this->notify_.finalize();
-    this->write_frame(this->notify_);
+    this->send_notify_(NETWORK_NOTIFY);
     return;
   }
   if (this->appliance_ != nullptr)
     this->appliance_->on_update();
 }
 
-void MideaDongle::write_frame(const Frame &frame) {
+void MideaDongle::send_notify_(MideaMessageType type) {
+    this->notify_.set_type(type);
+    this->write_frame(this->notify_);
+}
+
+void MideaDongle::write_frame(BaseFrame &frame) {
+  frame.set_id(this->msg_id_++);
+  frame.finalize();
   this->write_array(frame.data(), frame.size());
   ESP_LOGD(TAG, "TX: %s", frame.to_string().c_str());
 }

@@ -130,7 +130,7 @@ class PropertiesFrame : public midea_dongle::BaseFrame {
 };
 
 // Query state frame (read-only)
-class QueryFrame : public midea_dongle::StaticFrame<midea_dongle::Frame> {
+class QueryFrame : public midea_dongle::StaticFrame<midea_dongle::BaseFrame> {
  public:
   QueryFrame() : StaticFrame(FPSTR(this->INIT)) {}
 
@@ -139,7 +139,7 @@ class QueryFrame : public midea_dongle::StaticFrame<midea_dongle::Frame> {
 };
 
 // Power query state frame (read-only)
-class PowerQueryFrame : public midea_dongle::StaticFrame<midea_dongle::Frame> {
+class PowerQueryFrame : public midea_dongle::StaticFrame<midea_dongle::BaseFrame> {
  public:
   PowerQueryFrame() : StaticFrame(FPSTR(this->INIT)) {}
 
