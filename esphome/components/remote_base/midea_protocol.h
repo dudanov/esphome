@@ -53,7 +53,7 @@ class MideaData {
 class MideaFollowMe : public MideaData {
  public:
   // Default constructor (temp: 30C, beeper: off)
-  MideaFollowMe() : MideaData({ MideaTypeFollowMe, 0x82, 0x6F, 0x7F, 0x1F }) {}
+  MideaFollowMe() : MideaData({ MideaTypeFollowMe, 0xFF, 0xFF, 0xFF, 0xFF }) {}
   // Copy from Base
   MideaFollowMe(const MideaData &data) : MideaData(data) {}
   // Direct from temperature and beeper values
