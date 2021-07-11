@@ -8,36 +8,24 @@ namespace midea_dongle {
 static const char *const TAG = "midea_dongle";
 
 void MideaDongle::loop() {
-  while (this->available()) {
-    const uint8_t rx = this->read();
-    if (this->idx_ <= OFFSET_LENGTH) {
-      if (this->idx_ == OFFSET_LENGTH) {
-        if (rx <= OFFSET_BODY || rx >= sizeof(this->buf_)) {
-          this->reset_();
-          continue;
-        }
-        this->cnt_ = rx;
-      } else if (rx != SYNC_BYTE) {
-        continue;
-      }
-    }
-    this->buf_[this->idx_++] = rx;
-    if (--this->cnt_)
-      continue;
-    this->reset_();
-    const BaseFrame frame(this->buf_);
-    ESP_LOGD(TAG, "RX: %s", frame.to_string().c_str());
-    if (!frame.is_valid()) {
+  while (this->reader_.read(this)) {
+    ESP_LOGD(TAG, "RX: %s", this->reader_.to_string().c_str());
+    if (!this->reader_.is_valid()) {
       ESP_LOGW(TAG, "RX: frame check failed!");
       continue;
     }
-    if (frame.get_type() == QUERY_NETWORK) {
+    // need send response to QUERY_NETWORK request
+    if (this->reader_.get_type() == QUERY_NETWORK) {
       this->notify_.set_type(QUERY_NETWORK);
       this->need_notify_ = true;
-      continue;
+      break;
     }
+    // ignore answer for NETWORK_NOTIFY request
+    if (this->reader_.get_type() == NETWORK_NOTIFY)
+      continue;
+    // other frames send to appliance
     if (this->appliance_ != nullptr)
-      this->appliance_->on_frame(frame);
+      this->appliance_->on_frame(this->reader_);
   }
 }
 

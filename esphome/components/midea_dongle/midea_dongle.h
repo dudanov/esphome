@@ -42,21 +42,10 @@ class MideaDongle : public PollingComponent, public uart::UARTDevice {
   MideaAppliance *appliance_{nullptr};
   remote_transmitter::RemoteTransmitterComponent *transmitter_{nullptr};
   NotifyFrame notify_;
+  FrameReader reader_;
   unsigned notify_timer_{1};
-  // Buffer
-  uint8_t buf_[36];
-  // Index
-  uint8_t idx_{0};
-  // Reverse receive counter
-  uint8_t cnt_{2};
   uint8_t rssi_timer_{0};
   bool need_notify_{false};
-
-  // Reset receiver state
-  void reset_() {
-    this->idx_ = 0;
-    this->cnt_ = 2;
-  }
 };
 
 }  // namespace midea_dongle

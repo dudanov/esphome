@@ -88,6 +88,18 @@ template<typename T = Frame, size_t buf_size = 36> class StaticFrame : public T 
   uint8_t buf_[buf_size];
 };
 
+class FrameReader : public StaticFrame<BaseFrame, 36> {
+ public:
+  bool read(Stream *stream);
+ protected:
+  uint8_t idx_{0};
+  uint8_t cnt_{2};
+  void reset_() {
+    this->idx_ = 0;
+    this->cnt_ = 2;
+  }
+};
+
 // Device network notification frame
 class NotifyFrame : public midea_dongle::StaticFrame<BaseFrame, 32> {
  public:
