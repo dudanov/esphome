@@ -116,7 +116,7 @@ bool MideaAC::allow_custom_preset(const std::string &custom_preset) const {
       ESP_LOGD(TAG, "%s is only available in HEAT mode", MIDEA_FREEZE_PROTECTION_PRESET.c_str());
     }
   }
-  return false;
+  return true;//false;
 }
 
 void MideaAC::control(const climate::ClimateCall &call) {
