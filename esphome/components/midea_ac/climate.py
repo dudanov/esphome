@@ -40,6 +40,7 @@ CLIMATE_CUSTOM_FAN_MODES = {
 validate_climate_custom_fan_mode = cv.enum(CLIMATE_CUSTOM_FAN_MODES, upper=True)
 
 CLIMATE_CUSTOM_PRESETS = {
+    "TURBO_BOOST": "TURBO BOOST",
     "FREEZE_PROTECTION": "freeze protection",
 }
 
