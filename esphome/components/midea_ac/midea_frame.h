@@ -155,7 +155,10 @@ class PowerQueryFrame : public midea_dongle::StaticFrame<midea_dongle::Frame> {
 class CommandFrame : public midea_dongle::StaticFrame<PropertiesFrame> {
  public:
   CommandFrame() : StaticFrame(FPSTR(this->INIT)) {}
-  void set_beeper_feedback(bool state) { this->set_bytemask_(11, 0x40, state); }
+  void set_beeper_feedback(bool state) {
+    this->set_bytemask_(11, 0x40, state);
+    this->buf_[11] |= 0x02;
+  }
 
  private:
   static const uint8_t PROGMEM INIT[];
