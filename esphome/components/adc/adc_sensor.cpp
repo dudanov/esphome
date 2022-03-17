@@ -24,20 +24,24 @@ static const adc_bits_width_t ADC_WIDTH_MAX_SOC_BITS = static_cast<adc_bits_widt
 void ADCSensor::setup() {
   ESP_LOGCONFIG(TAG, "Setting up ADC '%s'...", this->get_name().c_str());
 #ifndef USE_ADC_SENSOR_VCC
-  pin_->setup();
+  this->pin_->setup();
 #endif
 
 #ifdef USE_ESP32
-  adc1_config_width(ADC_WIDTH_MAX_SOC_BITS);
-  if (!autorange_) {
-    adc1_config_channel_atten(channel_, attenuation_);
+  if (this->unit_ == ADC_UNIT_1)
+    adc1_config_width(ADC_WIDTH_MAX_SOC_BITS);
+  if (!this->autorange_) {
+    if (this->unit_ == ADC_UNIT_1)
+      adc1_config_channel_atten(this->adc1_channel_, this->attenuation_);
+    else
+      adc2_config_channel_atten(this->adc2_channel_, this->attenuation_);
   }
 
   // load characteristics for each attenuation
   for (int i = 0; i < (int) ADC_ATTEN_MAX; i++) {
-    auto cal_value = esp_adc_cal_characterize(ADC_UNIT_1, (adc_atten_t) i, ADC_WIDTH_MAX_SOC_BITS,
+    auto cal_value = esp_adc_cal_characterize(this->unit_, (adc_atten_t) i, ADC_WIDTH_MAX_SOC_BITS,
                                               1100,  // default vref
-                                              &cal_characteristics_[i]);
+                                              &this->cal_characteristics_[i]);
     switch (cal_value) {
       case ESP_ADC_CAL_VAL_EFUSE_VREF:
         ESP_LOGV(TAG, "Using eFuse Vref for calibration");
@@ -53,7 +57,7 @@ void ADCSensor::setup() {
 
   // adc_gpio_init doesn't exist on ESP32-C3 or ESP32-H2
 #if !defined(USE_ESP32_VARIANT_ESP32C3) && !defined(USE_ESP32_VARIANT_ESP32H2)
-  adc_gpio_init(ADC_UNIT_1, (adc_channel_t) channel_);
+  adc_gpio_init(this->unit_, this->adc_channel_);
 #endif
 #endif  // USE_ESP32
 }
@@ -64,13 +68,13 @@ void ADCSensor::dump_config() {
 #ifdef USE_ADC_SENSOR_VCC
   ESP_LOGCONFIG(TAG, "  Pin: VCC");
 #else
-  LOG_PIN("  Pin: ", pin_);
+  LOG_PIN("  Pin: ", this->pin_);
 #endif
 #endif  // USE_ESP8266
 
 #ifdef USE_ESP32
-  LOG_PIN("  Pin: ", pin_);
-  if (autorange_) {
+  LOG_PIN("  Pin: ", this->pin_);
+  if (this->autorange_) {
     ESP_LOGCONFIG(TAG, " Attenuation: auto");
   } else {
     switch (this->attenuation_) {
@@ -108,7 +112,7 @@ float ADCSensor::sample() {
 #else
   int raw = analogRead(this->pin_->get_pin());  // NOLINT
 #endif
-  if (output_raw_) {
+  if (this->output_raw_) {
     return raw;
   }
   return raw / 1024.0f;
@@ -117,30 +121,51 @@ float ADCSensor::sample() {
 
 #ifdef USE_ESP32
 float ADCSensor::sample() {
-  if (!autorange_) {
-    int raw = adc1_get_raw(channel_);
+  if (!this->autorange_) {
+    int raw;
+    if (this->unit_ == ADC_UNIT_1)
+      raw = adc1_get_raw(this->adc1_channel_);
+    else
+      adc2_get_raw(this->adc2_channel_, ADC_WIDTH_MAX_SOC_BITS, &raw);
     if (raw == -1) {
       return NAN;
     }
-    if (output_raw_) {
+    if (this->output_raw_) {
       return raw;
     }
-    uint32_t mv = esp_adc_cal_raw_to_voltage(raw, &cal_characteristics_[(int) attenuation_]);
+    uint32_t mv = esp_adc_cal_raw_to_voltage(raw, &this->cal_characteristics_[(int) this->attenuation_]);
     return mv / 1000.0f;
   }
 
   int raw11, raw6 = 4095, raw2 = 4095, raw0 = 4095;
-  adc1_config_channel_atten(channel_, ADC_ATTEN_DB_11);
-  raw11 = adc1_get_raw(channel_);
-  if (raw11 < 4095) {
-    adc1_config_channel_atten(channel_, ADC_ATTEN_DB_6);
-    raw6 = adc1_get_raw(channel_);
-    if (raw6 < 4095) {
-      adc1_config_channel_atten(channel_, ADC_ATTEN_DB_2_5);
-      raw2 = adc1_get_raw(channel_);
-      if (raw2 < 4095) {
-        adc1_config_channel_atten(channel_, ADC_ATTEN_DB_0);
-        raw0 = adc1_get_raw(channel_);
+  if (this->unit_ == ADC_UNIT_1) {
+    adc1_config_channel_atten(this->adc1_channel_, ADC_ATTEN_DB_11);
+    raw11 = adc1_get_raw(this->adc1_channel_);
+    if (raw11 < 4095) {
+      adc1_config_channel_atten(this->adc1_channel_, ADC_ATTEN_DB_6);
+      raw6 = adc1_get_raw(this->adc1_channel_);
+      if (raw6 < 4095) {
+        adc1_config_channel_atten(this->adc1_channel_, ADC_ATTEN_DB_2_5);
+        raw2 = adc1_get_raw(this->adc1_channel_);
+        if (raw2 < 4095) {
+          adc1_config_channel_atten(this->adc1_channel_, ADC_ATTEN_DB_0);
+          raw0 = adc1_get_raw(this->adc1_channel_);
+        }
+      }
+    }
+  } else {
+    adc2_config_channel_atten(this->adc2_channel_, ADC_ATTEN_DB_11);
+    adc2_get_raw(this->adc2_channel_, ADC_WIDTH_MAX_SOC_BITS, &raw11);
+    if (raw11 < 4095) {
+      adc2_config_channel_atten(this->adc2_channel_, ADC_ATTEN_DB_6);
+      adc2_get_raw(this->adc2_channel_, ADC_WIDTH_MAX_SOC_BITS, &raw6);
+      if (raw6 < 4095) {
+        adc2_config_channel_atten(this->adc2_channel_, ADC_ATTEN_DB_2_5);
+        adc2_get_raw(this->adc2_channel_, ADC_WIDTH_MAX_SOC_BITS, &raw2);
+        if (raw2 < 4095) {
+          adc2_config_channel_atten(this->adc2_channel_, ADC_ATTEN_DB_0);
+          adc2_get_raw(this->adc2_channel_, ADC_WIDTH_MAX_SOC_BITS, &raw0);
+        }
       }
     }
   }
