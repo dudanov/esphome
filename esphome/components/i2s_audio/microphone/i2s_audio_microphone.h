@@ -40,7 +40,7 @@ class I2SAudioMicrophone : public I2SAudioIn, public microphone::Microphone, pub
 #endif
   bool pdm_{false};
   std::vector<uint8_t> buffer_;
-  std::vector<uint32_t> in_buffer_;
+  std::vector<uint8_t> in_buffer_;
 
   HighFrequencyLoopRequester high_freq_;
 };

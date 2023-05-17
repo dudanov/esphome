@@ -17,7 +17,7 @@ static const char *const TAG = "i2s_audio.microphone";
 void I2SAudioMicrophone::setup() {
   ESP_LOGCONFIG(TAG, "Setting up I2S Audio Microphone...");
   this->buffer_.resize(BUFFER_SIZE);
-  this->in_buffer_.resize(BUFFER_SIZE / 2);
+  this->in_buffer_.resize(BUFFER_SIZE * 2);
 
 #if SOC_I2S_SUPPORTS_ADC
   if (this->adc_) {
@@ -117,10 +117,10 @@ void I2SAudioMicrophone::read_() {
 
   this->status_clear_warning();
 
-  auto it = this->buffer_.data();
-  for (auto sample : this->in_buffer_) {
-    *it++ = static_cast<uint8_t>(sample >>= 24);
-    *it++ = static_cast<uint8_t>(sample >>= 16);
+  auto src = this->in_buffer_.data();
+  for (auto dst = this->buffer_.begin(); dst != this->buffer_.end(); dst += 2, src += 4) {
+    dst[0] = src[0];
+    dst[1] = src[1];
   }
 
   this->data_callbacks_.call(this->buffer_);
