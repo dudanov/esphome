@@ -17,6 +17,7 @@ static const char *const TAG = "i2s_audio.microphone";
 void I2SAudioMicrophone::setup() {
   ESP_LOGCONFIG(TAG, "Setting up I2S Audio Microphone...");
   this->buffer_.resize(BUFFER_SIZE);
+  this->in_buffer_.resize(BUFFER_SIZE / 2);
 
 #if SOC_I2S_SUPPORTS_ADC
   if (this->adc_) {
@@ -52,13 +53,13 @@ void I2SAudioMicrophone::start_() {
       .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
       .communication_format = I2S_COMM_FORMAT_STAND_I2S,
       .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-      .dma_buf_count = 4,
+      .dma_buf_count = 8,
       .dma_buf_len = 256,
       .use_apll = false,
       .tx_desc_auto_clear = false,
       .fixed_mclk = 0,
       .mclk_multiple = I2S_MCLK_MULTIPLE_DEFAULT,
-      .bits_per_chan = I2S_BITS_PER_CHAN_DEFAULT,
+      .bits_per_chan = I2S_BITS_PER_CHAN_24BIT,
   };
 
 #if SOC_I2S_SUPPORTS_ADC
@@ -107,7 +108,7 @@ void I2SAudioMicrophone::stop_() {
 void I2SAudioMicrophone::read_() {
   size_t bytes_read = 0;
   esp_err_t err =
-      i2s_read(this->parent_->get_port(), this->buffer_.data(), BUFFER_SIZE, &bytes_read, (100 / portTICK_PERIOD_MS));
+      i2s_read(this->parent_->get_port(), this->in_buffer_.data(), BUFFER_SIZE * 2, &bytes_read, (100 / portTICK_PERIOD_MS));
   if (err != ESP_OK) {
     ESP_LOGW(TAG, "Error reading from I2S microphone: %s", esp_err_to_name(err));
     this->status_set_warning();
@@ -115,6 +116,12 @@ void I2SAudioMicrophone::read_() {
   }
 
   this->status_clear_warning();
+
+  auto it = this->buffer_.data();
+  for (auto sample : this->in_buffer_) {
+    *it++ = static_cast<uint8_t>(sample >>= 24);
+    *it++ = static_cast<uint8_t>(sample >>= 16);
+  }
 
   this->data_callbacks_.call(this->buffer_);
 }
