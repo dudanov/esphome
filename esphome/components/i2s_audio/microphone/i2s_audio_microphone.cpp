@@ -137,8 +137,7 @@ void I2SAudioMicrophone::read_() {
       samples[i] = reinterpret_cast<int16_t *>(this->buffer_)[i];
       continue;
     } else if (this->bits_per_sample_ == I2S_BITS_PER_SAMPLE_32BIT) {
-      int32_t temp = reinterpret_cast<int32_t *>(this->buffer_)[i] >> 14;
-      samples[i] = clamp<int16_t>(temp, INT16_MIN, INT16_MAX);
+      samples[i] = static_cast<int16_t>(reinterpret_cast<int32_t *>(this->buffer_)[i] >> 16);
       continue;
     }
   }
