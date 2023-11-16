@@ -9,15 +9,46 @@ static const char *const TAG = "coolix.climate";
 
 static const uint32_t COOLIX_OFF = 0xB27BE0;
 static const uint32_t COOLIX_SWING = 0xB26BE0;
+static const uint32_t COOLIX_VSWING_STEP = 0xB20FE0;
+static const uint32_t COOLIX_HSWING_STEP = 0xB5F5A2;
+static const uint32_t COOLIX_SLEEP = 0xB2E003;
+static const uint32_t COOLIX_TURBO = 0xB5F5A2;
 static const uint32_t COOLIX_LED = 0xB5F5A5;
-static const uint32_t COOLIX_SILENCE_FP = 0xB5F5B6;
+
+using remote_base::CoolixData;
+
+class ControlData : protected CoolixData {
+  static CoolixData make_poweroff() { return COOLIX_OFF; }
+  static CoolixData make_swing() { return COOLIX_SWING; }
+};
+
+void transmit_coolix(remote_base::RemoteTransmitterBase *transmitter, const CoolixData &data) {
+  auto transmit = transmitter->transmit();
+  remote_base::CoolixProtocol().encode(transmit.get_data(), data);
+  transmit.perform();
+}
+
+/*
+  RECEIVER NOTES:
+  1. `main` control command should only be looked for in `CoolixData.second`;
+  2. `TURBO` command always `stricted`;
+  3. `SLEEP` command always in `CoolixData.first` and used with others commands (`unstricted`);
+  4. `SLEEP` and `TURBO` presets are mutually exclusive. Except when `SLEEP` used with `SWING`,
+     in which `SLEEP` does not disable `TURBO`;
+  5. `SWING` command should only be looked for in `CoolixData.second`;
+  6. `SWING_STEP` command always in `CoolixData.first` and consist only from one command;
+*/
 
 // On, 25C, Mode: Auto, Fan: Auto, Zone Follow: Off, Sensor Temp: Ignore.
+
+// Mode
+static const uint32_t COOLIX_MODE_MASK = 0b1100;
 static const uint8_t COOLIX_COOL = 0b0000;
 static const uint8_t COOLIX_DRY_FAN = 0b0100;
 static const uint8_t COOLIX_AUTO = 0b1000;
 static const uint8_t COOLIX_HEAT = 0b1100;
-static const uint32_t COOLIX_MODE_MASK = 0b1100;
+
+// Fan
 static const uint32_t COOLIX_FAN_MASK = 0xF000;
 static const uint32_t COOLIX_FAN_MODE_AUTO_DRY = 0x1000;
 static const uint32_t COOLIX_FAN_AUTO = 0xB000;
@@ -26,25 +57,19 @@ static const uint32_t COOLIX_FAN_MED = 0x5000;
 static const uint32_t COOLIX_FAN_MAX = 0x3000;
 
 // Temperature
-static const uint8_t COOLIX_TEMP_RANGE = COOLIX_TEMP_MAX - COOLIX_TEMP_MIN + 1;
-static const uint8_t COOLIX_FAN_TEMP_CODE = 0b11100000;  // Part of Fan Mode.
 static const uint32_t COOLIX_TEMP_MASK = 0b11110000;
-static const uint8_t COOLIX_TEMP_MAP[COOLIX_TEMP_RANGE] = {
-    0b00000000,  // 17C
-    0b00010000,  // 18c
-    0b00110000,  // 19C
-    0b00100000,  // 20C
-    0b01100000,  // 21C
-    0b01110000,  // 22C
-    0b01010000,  // 23C
-    0b01000000,  // 24C
-    0b11000000,  // 25C
-    0b11010000,  // 26C
-    0b10010000,  // 27C
-    0b10000000,  // 28C
-    0b10100000,  // 29C
-    0b10110000   // 30C
+static const uint8_t COOLIX_FAN_TEMP_CODE = 0b11100000;  // Part of Fan Mode.
+static const uint8_t COOLIX_TEMP_MAP[] = {
+    0x00, 0x10, 0x30, 0x20, 0x60, 0x70, 0x50, 0x40, 0xC0, 0xD0, 0x90, 0x80, 0xA0, 0xB0,
 };
+
+void CoolixClimate::control(const climate::ClimateCall &call) {
+  send_swing_cmd_ = call.get_swing_mode().has_value();
+  // swing resets after unit powered off
+  if (call.get_mode().has_value() && *call.get_mode() == climate::CLIMATE_MODE_OFF)
+    this->swing_mode = climate::CLIMATE_SWING_OFF;
+  climate_ir::ClimateIR::control(call);
+}
 
 void CoolixClimate::transmit_state() {
   uint32_t remote_state = 0xB20F00;
@@ -74,7 +99,7 @@ void CoolixClimate::transmit_state() {
     }
     if (this->mode != climate::CLIMATE_MODE_OFF) {
       if (this->mode != climate::CLIMATE_MODE_FAN_ONLY) {
-        auto temp = (uint8_t) roundf(clamp<float>(this->target_temperature, COOLIX_TEMP_MIN, COOLIX_TEMP_MAX));
+        uint8_t temp = lroundf(clamp<float>(this->target_temperature, COOLIX_TEMP_MIN, COOLIX_TEMP_MAX));
         remote_state |= COOLIX_TEMP_MAP[temp - COOLIX_TEMP_MIN];
       } else {
         remote_state |= COOLIX_FAN_TEMP_CODE;
@@ -102,7 +127,23 @@ void CoolixClimate::transmit_state() {
     }
   }
   ESP_LOGV(TAG, "Sending coolix code: 0x%06" PRIX32, remote_state);
+
   this->transmit_<remote_base::CoolixProtocol>(remote_state);
+  //auto transmit = this->transmitter_->transmit();
+  //auto *data = transmit.get_data();
+  //remote_base::CoolixProtocol().encode(data, remote_state);
+  //transmit.perform();
+}
+
+template<typename T, typename M> void toggle(T &val, const M &first, const M &second) {
+  val = (val == first) ? second : first;
+}
+
+template<typename T, typename M> void update_property(T &property, const M &value, bool &is_updated) {
+  if (property == value)
+    return;
+  property = value;
+  is_updated = true;
 }
 
 bool CoolixClimate::on_coolix(climate::Climate *parent, remote_base::RemoteReceiveData data) {
@@ -112,14 +153,39 @@ bool CoolixClimate::on_coolix(climate::Climate *parent, remote_base::RemoteRecei
   // Decoded remote state y 3 bytes long code.
   uint32_t remote_state = (*decoded).second;
   ESP_LOGV(TAG, "Decoded 0x%06" PRIX32, remote_state);
-  if ((remote_state & 0xFF0000) != 0xB20000)
+
+  const uint8_t hdr = remote_state >> 16;
+
+  if (hdr != 0xB2 && hdr != 0xB5)
     return false;
 
+  bool is_updated = false;
+
   if (remote_state == COOLIX_OFF) {
-    parent->mode = climate::CLIMATE_MODE_OFF;
+    /* OFF MODE. ANY PRESETS CLEAR. */
+    update_property(parent->mode, climate::CLIMATE_MODE_OFF, is_updated);
+    update_property(parent->preset, climate::CLIMATE_PRESET_NONE, is_updated);
+
   } else if (remote_state == COOLIX_SWING) {
-    parent->swing_mode =
-        parent->swing_mode == climate::CLIMATE_SWING_OFF ? climate::CLIMATE_SWING_VERTICAL : climate::CLIMATE_SWING_OFF;
+    /* TOGGLE VERTICAL SWING MODE. PRESERVE IT STATE EVEN IN OFF MODE. */
+    toggle(parent->swing_mode, climate::CLIMATE_SWING_OFF, climate::CLIMATE_SWING_VERTICAL);
+    is_updated = true;
+
+  } else if (remote_state == COOLIX_SLEEP) {
+    /* SLEEP PRESET. NOT WORK IN DRY OR FAN_ONLY MODES. */
+    if (parent->mode != climate::CLIMATE_MODE_DRY && parent->mode != climate::CLIMATE_MODE_FAN_ONLY) {
+      update_property(parent->preset, climate::CLIMATE_PRESET_SLEEP, is_updated);
+      update_property(parent->fan_mode, climate::CLIMATE_FAN_AUTO, is_updated);
+    }
+
+  } else if (remote_state == COOLIX_TURBO) {
+    /* TOGGLE BOOST PRESET. WORK ONLY IN COOL AND HEAT MODES. */
+    if (parent->mode == climate::CLIMATE_MODE_COOL || parent->mode == climate::CLIMATE_MODE_HEAT) {
+      toggle(parent->preset, climate::CLIMATE_PRESET_BOOST, climate::CLIMATE_PRESET_NONE);
+      parent->fan_mode = climate::CLIMATE_FAN_AUTO;
+      is_updated = true;
+    }
+
   } else {
     if ((remote_state & COOLIX_MODE_MASK) == COOLIX_HEAT) {
       parent->mode = climate::CLIMATE_MODE_HEAT;
@@ -148,9 +214,9 @@ bool CoolixClimate::on_coolix(climate::Climate *parent, remote_base::RemoteRecei
 
     // Temperature
     uint8_t temperature_code = remote_state & COOLIX_TEMP_MASK;
-    for (uint8_t i = 0; i < COOLIX_TEMP_RANGE; i++) {
-      if (COOLIX_TEMP_MAP[i] == temperature_code)
-        parent->target_temperature = i + COOLIX_TEMP_MIN;
+    for (unsigned idx = 0; idx != sizeof(COOLIX_TEMP_MAP); ++idx) {
+      if (COOLIX_TEMP_MAP[idx] == temperature_code)
+        parent->target_temperature = idx + COOLIX_TEMP_MIN;
     }
   }
   parent->publish_state();

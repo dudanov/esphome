@@ -1,7 +1,7 @@
 #pragma once
 
-#include "esphome/components/remote_base/midea_protocol.h"
 #include "esphome/components/climate/climate_mode.h"
+#include "esphome/components/remote_base/midea_protocol.h"
 
 namespace esphome {
 namespace midea_ir {
@@ -10,6 +10,11 @@ using climate::ClimateMode;
 using climate::ClimateFanMode;
 using remote_base::MideaData;
 
+constexpr uint8_t TEMPC_MIN = 17;
+constexpr uint8_t TEMPC_MAX = 30;
+constexpr uint8_t TEMPF_MIN = 62;
+constexpr uint8_t TEMPF_MAX = 86;
+
 class ControlData : public MideaData {
  public:
   // Default constructor (power: ON, mode: AUTO, fan: AUTO, temp: 25C)
@@ -17,11 +22,12 @@ class ControlData : public MideaData {
   // Copy from Base
   ControlData(const MideaData &data) : MideaData(data) {}
 
-  void set_temp(float temp);
-  float get_temp() const;
+  void set_target_temperature(float temp, bool use_fahrenheit);
+  float get_target_temperature() const;
 
   void set_mode(ClimateMode mode);
   ClimateMode get_mode() const;
+  bool has_mode(ClimateMode mode) const { return this->get_mode() == mode; }
 
   void set_fan_mode(ClimateFanMode mode);
   ClimateFanMode get_fan_mode() const;
@@ -54,38 +60,6 @@ class ControlData : public MideaData {
   Mode get_mode_() const { return static_cast<Mode>(this->get_value_(1, 7)); }
   void set_power_(bool value) { this->set_mask_(1, value, 128); }
   bool get_power_() const { return this->get_value_(1, 128); }
-};
-
-class FollowMeData : public MideaData {
- public:
-  // Default constructor (temp: 30C, beeper: off)
-  FollowMeData() : MideaData({MIDEA_TYPE_FOLLOW_ME, 0x82, 0x48, 0x7F, 0x1F}) {}
-  // Copy from Base
-  FollowMeData(const MideaData &data) : MideaData(data) {}
-  // Direct from temperature and beeper values
-  FollowMeData(uint8_t temp, bool beeper = false) : FollowMeData() {
-    this->set_temp(temp);
-    this->set_beeper(beeper);
-  }
-
-  /* TEMPERATURE */
-  uint8_t temp() const { return this->get_value_(4) - 1; }
-  void set_temp(uint8_t val) { this->set_value_(4, std::min(MAX_TEMP, val) + 1); }
-
-  /* BEEPER */
-  bool beeper() const { return this->get_value_(3, 128); }
-  void set_beeper(bool value) { this->set_mask_(3, value, 128); }
-
- protected:
-  static const uint8_t MAX_TEMP = 37;
-};
-
-class SpecialData : public MideaData {
- public:
-  SpecialData(uint8_t code) : MideaData({MIDEA_TYPE_SPECIAL, code, 0xFF, 0xFF, 0xFF}) {}
-  static const uint8_t VSWING_STEP = 1;
-  static const uint8_t VSWING_TOGGLE = 2;
-  static const uint8_t TURBO_TOGGLE = 9;
 };
 
 }  // namespace midea_ir

@@ -2,34 +2,15 @@
 
 #ifdef USE_ARDUINO
 
-#include "esphome/core/automation.h"
 #include "air_conditioner.h"
+#include "esphome/core/automation.h"
+#include "esphome/components/switch/switch.h"
 
 namespace esphome {
 namespace midea {
 namespace ac {
 
-template<typename... Ts> class MideaActionBase : public Action<Ts...> {
- public:
-  void set_parent(AirConditioner *parent) { this->parent_ = parent; }
-
- protected:
-  AirConditioner *parent_;
-};
-
-template<typename... Ts> class FollowMeAction : public MideaActionBase<Ts...> {
-  TEMPLATABLE_VALUE(float, temperature)
-  TEMPLATABLE_VALUE(bool, beeper)
-
-  void play(Ts... x) override {
-    this->parent_->do_follow_me(this->temperature_.value(x...), this->beeper_.value(x...));
-  }
-};
-
-template<typename... Ts> class SwingStepAction : public MideaActionBase<Ts...> {
- public:
-  void play(Ts... x) override { this->parent_->do_swing_step(); }
-};
+template<typename... Ts> class MideaActionBase : public Action<Ts...>, public Parented<AirConditioner> {};
 
 template<typename... Ts> class DisplayToggleAction : public MideaActionBase<Ts...> {
  public:
@@ -38,12 +19,12 @@ template<typename... Ts> class DisplayToggleAction : public MideaActionBase<Ts..
 
 template<typename... Ts> class BeeperOnAction : public MideaActionBase<Ts...> {
  public:
-  void play(Ts... x) override { this->parent_->do_beeper_on(); }
+  void play(Ts... x) override { this->parent_->set_beeper_feedback(true); }
 };
 
 template<typename... Ts> class BeeperOffAction : public MideaActionBase<Ts...> {
  public:
-  void play(Ts... x) override { this->parent_->do_beeper_off(); }
+  void play(Ts... x) override { this->parent_->set_beeper_feedback(false); }
 };
 
 template<typename... Ts> class PowerOnAction : public MideaActionBase<Ts...> {
@@ -59,6 +40,10 @@ template<typename... Ts> class PowerOffAction : public MideaActionBase<Ts...> {
 template<typename... Ts> class PowerToggleAction : public MideaActionBase<Ts...> {
  public:
   void play(Ts... x) override { this->parent_->do_power_toggle(); }
+};
+
+class BeeperSwitch : public switch_::Switch, public Parented<AirConditioner> {
+  void write_state(bool state) override { this->parent_->set_beeper_feedback(state); }
 };
 
 }  // namespace ac

@@ -27,6 +27,13 @@ bool MideaData::is_compliment(const MideaData &rhs) const {
                     [](const uint8_t &a, const uint8_t &b) { return a + b == 255; });
 }
 
+void MideaData::transmit(RemoteTransmitterBase *transmitter) const {
+  ESP_LOGD(TAG, "Transmit Midea: %s", this->to_string().c_str());
+  auto transmit = transmitter->transmit();
+  MideaProtocol().encode(transmit.get_data(), *this);
+  transmit.perform();
+}
+
 void MideaProtocol::encode(RemoteTransmitData *dst, const MideaData &src) {
   dst->set_carrier_frequency(38000);
   dst->reserve(2 + 48 * 2 + 2 + 2 + 48 * 2 + 1);
