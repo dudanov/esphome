@@ -112,7 +112,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_AUTOCONF, default=True): cv.boolean,
             cv.Optional(CONF_BEEPER): BEEPER_SWITCH_SCHEMA,
             # TODO: auto-import to 'midea_ir' automations.
-            cv.Optional(CONF_USE_FAHRENHEIT, default=True): cv.boolean,
+            cv.Optional(CONF_USE_FAHRENHEIT, default=False): cv.boolean,
             cv.Optional(CONF_SUPPORTED_MODES): cv.ensure_list(validate_modes),
             cv.Optional(CONF_SUPPORTED_SWING_MODES): cv.ensure_list(
                 validate_swing_modes
